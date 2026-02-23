@@ -1,0 +1,668 @@
+# GLiNER2 Omni-Domain Global Config [V4.2 - Quad-Lingual EN/FA/AR/HE]
+# Optimized for mixed-script zero-shot NER in English, Persian (Farsi), Arabic, and Hebrew.
+
+model_name: "fastino/gliner2-multi-v1"
+cache_dir: ".cache/ner"
+
+# =========================
+# 0) SYSTEM CONFIGURATION
+# =========================
+system:
+  local_model_dir: "sharifsetup_NER"
+  device: "auto"
+  device_map: null
+  torch_dtype: "auto"
+  num_threads: 4
+  low_cpu_mem_usage: true
+  local_files_only: true
+  prefer_local_files: true
+  offline_mode: "auto"
+  revision: null
+  load_tokenizer: true
+  trust_remote_code: false
+  startup_mode: "blocking"
+  warmup_on_load: true
+  # Mixed EN/FA/AR/HE warmup string to validate LTR<->RTL transitions in one pass.
+  warmup_text: "On 2026-02-17, Dr. Sarah Lee met علی رضایی in تهران, ثم سافرت إلى القاهرة, ולאחר מכן ביקרה בתל אביב בשעה 14:30."
+  warmup_labels:
+    [
+      "person",
+      "organization",
+      "gpe",
+      "location",
+      "date",
+      "time",
+      "money",
+      "event",
+    ]
+  display_name: "sharifsetup-NER-v2.2.0-quadlingual"
+  download_on_startup: true
+
+# =========================
+# 1) PIPELINE HARDENING
+# =========================
+pipeline:
+  request_concurrency_limit: 8
+  inference_concurrency_limit: 4
+  rate_limit:
+    chars_per_window: 1000000
+    window_seconds: 60
+
+  normalization_mode: "shadow_copy"
+  maintain_offset_map: true
+  output_text_field: "canonical_text"
+
+  split_lines: true
+  chunking:
+    enabled: true
+    strategy: "sentence_or_punct"
+    max_chars: 850
+    overlap_chars: 48
+    respect_quotes_parentheses: true
+    concurrency_limit: 4
+
+  enable_normalization: true
+  confidence_threshold: 0.20
+
+  acceptance_policy:
+    high_accept: 0.85
+    low_accept: 0.35
+    low_accept_requires_support: true
+    support_sources: ["regex", "gazetteer", "keyword_rule", "parentheses_merge"]
+    out_of_domain_multiplier: 1.15
+
+  performance:
+    max_labels_per_pass: 12
+    batch_inference: true
+    batch_size: 8
+    batch_max_chars: 6800
+    max_inflight_batches: 8
+
+# =========================
+# 1.1) NORMALIZATION (SAFE)
+# =========================
+normalization:
+  hebrew:
+    rules:
+      - name: "normalize_maqaf_and_dashes"
+        map: { "־": "-", "–": "-", "—": "-" }
+      - name: "normalize_quotes"
+        map: { "״": '"', "׳": "'", "“": '"', "”": '"', "«": '"', "»": '"' }
+      - name: "collapse_spaces"
+        pattern: "\\s+"
+        replace: " "
+    forbid_inplace_hyphen_spacing: true
+
+  arabic:
+    rules:
+      - name: "remove_tatweel_and_diacritics"
+        pattern: "[ًٌٍَُِّْـ]"
+        replace: ""
+      - name: "normalize_quotes"
+        map: { "“": '"', "”": '"', "«": '"', "»": '"' }
+      - name: "collapse_spaces"
+        pattern: "\\s+"
+        replace: " "
+    avoid_clitic_detach_pre_inference: true
+
+  persian:
+    rules:
+      - name: "normalize_yeh_kaf"
+        map: { "ي": "ی", "ك": "ک" }
+      - name: "normalize_zwnj"
+        map: { "\u200c": " " }
+      - name: "normalize_quotes"
+        map: { "“": '"', "”": '"', "«": '"', "»": '"' }
+      - name: "collapse_spaces"
+        pattern: "\\s+"
+        replace: " "
+
+post_canonicalization:
+  hebrew:
+    strip_prefix_prepositions:
+      enabled: true
+      applies_to_labels: ["gpe", "location", "facility", "address", "landmark"]
+      prefixes: ["ב", "ל", "מ", "כ", "ה", "ו"]
+      require_support: true
+    restore_hyphen_compounds:
+      enabled: true
+      examples: ["בן-גוריון", "דה-מרקר", "בית-המשפט", "משטרת ישראל"]
+
+  arabic:
+    strip_clitics:
+      enabled: true
+      applies_to_labels: ["gpe", "location", "facility", "address", "landmark"]
+      prefixes: ["بال", "ب", "لل", "ل", "و", "فال", "كال"]
+      require_support: true
+    normalize_definite_article:
+      enabled: true
+      allow_add_al_article_if_supported: true
+
+  persian:
+    normalize_spacing:
+      enabled: true
+      collapse_multiple_spaces: true
+
+# =========================
+# 1.5) DOMAINS (PRESET LABELS)
+# =========================
+domains:
+  general:
+    labels:
+      - "person"
+      - "alias"
+      - "title"
+      - "organization"
+      - "facility"
+      - "address"
+      - "gpe"
+      - "location"
+      - "landmark"
+      - "date"
+      - "time"
+      - "money"
+      - "percent"
+      - "quantity"
+    aliases: ["base", "default", "common", "standard", "גנרי"]
+
+  cyber:
+    labels:
+      - "threat_actor"
+      - "malware"
+      - "vulnerability"
+      - "digital_indicator"
+      - "ip_address"
+      - "url"
+      - "username"
+      - "project"
+    aliases: ["security", "hacking", "intel", "infosec", "תקשורת", "אבטחה"]
+
+  legal:
+    labels: ["law", "statute", "case_ref", "organization", "person", "date"]
+    aliases: ["juris", "court", "law", "statutory", "משפטי", "חוק"]
+
+  clinical:
+    labels: ["condition", "drug_agent", "procedure", "person", "organization", "date"]
+    aliases: ["medical", "health", "science", "biomed", "רפואי", "בריאות"]
+
+  financial:
+    labels:
+      - "asset_ticker"
+      - "transaction_ref"
+      - "bank_account"
+      - "credit_card"
+      - "tax_id"
+      - "money"
+      - "organization"
+      - "person"
+    aliases: ["fintech", "trade", "banking", "finance", "כלכלי", "פיננסי"]
+
+  travel:
+    labels:
+      - "gpe"
+      - "location"
+      - "facility"
+      - "address"
+      - "postal_code"
+      - "country_code"
+      - "flight"
+      - "ticket_id"
+      - "date"
+      - "time"
+      - "money"
+    aliases: ["tourism", "aviation", "flight", "booking", "תיירות", "נסיעות"]
+
+  multilingual_mixed:
+    labels:
+      - "person"
+      - "alias"
+      - "title"
+      - "organization"
+      - "facility"
+      - "address"
+      - "gpe"
+      - "location"
+      - "landmark"
+      - "postal_code"
+      - "country_code"
+      - "email"
+      - "phone_number"
+      - "url"
+      - "social_media_url"
+      - "ip_address"
+      - "username"
+      - "uuid"
+      - "national_id"
+      - "passport_number"
+      - "driver_license"
+      - "tax_id"
+      - "bank_account"
+      - "credit_card"
+      - "crypto_wallet"
+      - "date"
+      - "time"
+      - "event"
+      - "product"
+      - "law"
+      - "money"
+      - "percent"
+      - "quantity"
+    aliases:
+      [
+        "multilingual",
+        "mixed_script",
+        "code_switch",
+        "rtl_ltr",
+        "quad_lingual",
+        "fa_ar_he_en",
+      ]
+    inference_profile: "mixed_script_aggressive"
+    # Mixed-script text is noisier at script boundaries, so this profile is intentionally more permissive.
+    threshold_overrides:
+      high_accept: 0.80
+      low_accept: 0.30
+      overrides:
+        person: 0.28
+        organization: 0.28
+        gpe: 0.27
+        location: 0.27
+        facility: 0.27
+        address: 0.27
+        event: 0.29
+        product: 0.30
+
+# =========================
+# 1.6) LABEL ALIASES
+# =========================
+label_aliases:
+  person: ["human", "individual", "name", "אדם", "شخص", "فرد"]
+  alias: ["nickname", "handle", "stage_name", "כינוי", "لقب", "نام مستعار"]
+  title: ["honorific", "role_title", "job_title", "عنوان", "תואר", "سمت"]
+  organization: ["company", "firm", "agency", "institute", "חברה", "ארגון", "مؤسسة", "سازمان"]
+  facility: ["building", "airport", "complex", "site", "מתקן", "מבנה", "مرفق", "تاسیسات"]
+  address: ["street", "location_line", "כתובת", "عنوان", "نشانی"]
+  gpe: ["geo_political_entity", "city", "state", "country", "מדינה", "مدينة", "کشور"]
+  location: ["place", "region", "geographic_area", "מיקום", "موقع", "منطقه"]
+  landmark: ["monument", "famous_place", "נקודת ציון", "معلم", "نماد"]
+  postal_code: ["zip", "postcode", "מיקוד", "رمز بريدي", "کد پستی"]
+  country_code: ["iso_code", "dial_code", "קוד מדינה", "رمز دولة", "کد کشور"]
+  email: ["mail", "email_address", "דואל", "بريد إلكتروني", "ایمیل"]
+  phone_number: ["phone", "mobile", "telephone", "טלפון", "هاتف", "شماره تماس"]
+  url: ["link", "website", "uri", "קישור", "رابط", "نشانی وب"]
+  social_media_url: ["profile_link", "social_link", "קישור חברתי", "رابط اجتماعي", "لینک شبکه اجتماعی"]
+  ip_address: ["ip", "ipv4", "ipv6", "כתובת ip", "عنوان ip", "آی پی"]
+  username: ["user", "handle", "account_name", "שם משתמש", "اسم مستخدم", "نام کاربری"]
+  uuid: ["guid", "unique_id", "מזהה ייחודי", "معرف فريد", "شناسه یکتا"]
+  national_id: ["government_id", "citizen_id", "תעודת זהות", "هوية وطنية", "کد ملی"]
+  passport_number: ["passport", "travel_document", "דרכון", "جواز سفر", "شماره گذرنامه"]
+  driver_license: ["driving_license", "dl", "רישיון נהיגה", "رخصة قيادة", "گواهینامه"]
+  tax_id: ["tin", "vat_number", "מספר מס", "رقم ضريبي", "شناسه مالیاتی"]
+  bank_account: ["iban", "account_number", "חשבון בנק", "حساب بنكي", "حساب بانکی"]
+  credit_card: ["debit_card", "card_number", "כרטיס אשראי", "بطاقة ائتمان", "کارت بانکی"]
+  crypto_wallet: ["wallet", "blockchain_address", "ארנק קריפטו", "محفظة رقمية", "کیف پول"]
+  date: ["calendar_date", "year_month_day", "תאריך", "تاريخ", "تاریخ"]
+  time: ["clock_time", "hour", "שעה", "وقت", "زمان"]
+  event: ["occasion", "conference", "holiday", "אירוע", "حدث", "رویداد"]
+  product: ["item", "device", "service_name", "מוצר", "منتج", "محصول"]
+  law: ["regulation", "act", "statute", "חוק", "قانون", "قانونی"]
+  money: ["currency", "amount", "price", "cost", "כסף", "مبلغ", "مبلغ مالی"]
+  percent: ["percentage", "ratio", "אחוז", "نسبة مئوية", "درصد"]
+  quantity: ["measurement", "count", "volume", "כמות", "كمية", "مقدار"]
+
+  threat_actor: ["attacker", "hacker", "adversary", "APT", "תוקף", "مهاجم"]
+  malware: ["software", "virus", "trojan", "payload", "נוזקה", "بدافزار"]
+  vulnerability: ["bug", "flaw", "exploit", "CVE", "פרצה", "ثغرة"]
+  digital_indicator: ["IOC", "hash", "domain", "כתובת", "مؤشر", "نشانگر"]
+  statute: ["law", "article", "provision", "code", "חוק", "سند قانونی"]
+  case_ref: ["docket", "lawsuit", "judicial_case", "תיק", "دعوى قضائية"]
+
+# =========================
+# 2) SCHEMA PASSES
+# =========================
+schema_passes:
+  core_ner:
+    person: "Real human individuals and public personalities; supports full names, initials, and partial names without capitalization assumptions. Examples: Elon Musk, علی دایی, عمر الشريف, גל גדות"
+    alias: "Nicknames, stage names, pen names, and person-linked handles. Examples: The Rock, سردار, الزعيم, המלך"
+    title: "Honorific, professional, military, religious, or social titles attached to people. Examples: Dr., دکتر, الأستاذ, פרופ׳"
+    organization: "Companies, agencies, NGOs, institutions, clubs, and government bodies. Examples: OpenAI, دانشگاه تهران, جامعة القاهرة, אוניברסיטת תל אביב"
+
+    # Tehran/Cairo/Tel Aviv were selected as high-frequency geo entities that are common across EN/FA/AR/HE corpora.
+    gpe: "Geo-political entities such as cities, provinces/states, and countries; allow Arabic/Hebrew attached prepositions (e.g., بالقدس, ולירושלים) before canonical cleanup. Examples: London, تهران, القاهرة, תל אביב"
+    location: "Natural or informal locations that are not administrative units; preserve clitic-attached forms before normalization. Examples: Sahara Desert, کوه دماوند, صحراء الربع الخالي, ים המלח"
+    landmark: "Named monuments, iconic sites, and culturally recognized points of interest. Examples: Eiffel Tower, برج آزادی, برج خليفة, הכותל המערבי"
+    facility: "Named man-made facilities such as airports, hospitals, stations, campuses, and terminals; support clitic-attached prefixes in Arabic/Hebrew. Examples: Heathrow Airport, بیمارستان امام خمینی, مطار القاهرة الدولي, תחנת רכבת תל אביב סבידור"
+    address: "Street-level addresses, intersections, and civic address fragments; do not assume title case. Examples: 221B Baker Street, خیابان ولیعصر ۱۲۳ تهران, شارع التحرير 45 القاهرة, רחוב דיזנגוף 99 תל אביב"
+    postal_code: "Postal and ZIP code formats across countries. Examples: 10001, ۱۵۸۷۵-۴۳۱۱, ١١٥١١, 61000"
+    country_code: "Country dialing codes or ISO-style country codes in context. Examples: US/+1, ایران/+98, مصر/+20, ישראל/+972"
+
+    email: "Email addresses including internationalized local/domain forms when present. Examples: john@example.com, علی@مثال.ایران, ليلى@مثال.شبكة, יעל@דוגמה.ישראל"
+    phone_number: "Mobile, landline, and fax numbers in local or international notation. Examples: +1 415 555 0199, +98 21 ۸۸۷۷ ۶۶۵۵, +20 2 ٢٧٣٥ ١٢٣٤, +972 3 640 8000"
+    url: "Web URLs including deep links and localized paths/domains. Examples: https://openai.com, https://example.com/تهران, https://مثال.شبكة/القاهرة, https://דוגמה.ישראל/תל-אביב"
+    social_media_url: "Platform profile or post URLs from social networks. Examples: https://x.com/john_doe, https://instagram.com/ali.reza, https://facebook.com/ahmed.ali, https://linkedin.com/in/yael-cohen"
+    ip_address: "IPv4 or IPv6 network addresses in security or infrastructure context. Examples: 192.168.1.1, ۱۰.۰.۰.۱, ٢٠٠١:db8::1, 2001:db8::ff00:42:8329"
+    username: "User handles, login names, and account IDs with or without @ prefix. Examples: @jane_doe, @علی_رضا, @ahmed_dev, @יעל_כהן"
+    uuid: "Universally unique identifiers and GUID-like random identifiers. Examples: 550e8400-e29b-41d4-a716-446655440000, 6f9619ff-8b86-d011-b42d-00cf4fc964ff, 123e4567-e89b-12d3-a456-426614174000, a987fbc9-4bed-3078-cf07-9141ba07c9f3"
+
+    national_id: "Government-issued personal identity numbers. Examples: SSN 123-45-6789, کد ملی ۰۰۸۴۵۷۵۹۴۳, رقم هوية ٢٩٩٠١٠١٢٣٤٥٦٧٨, תעודת זהות 123456782"
+    passport_number: "Passport identifiers from any country format. Examples: XK392884, گذرنامه P12345678, جواز سفر N1234567, דרכון 98765432"
+    driver_license: "Driver license identifiers and regional DL formats. Examples: D123-456-789, گواهینامه ۷۸۴۵۶۱۲۳, رخصة قيادة ١٢٣٤-٥٦٧٨٩٠, רישיון נהיגה 1234567"
+    tax_id: "Taxpayer, VAT, or business tax identifiers. Examples: EIN 12-3456789, شناسه مالیاتی AHFPE3456K, رقم ضريبي ٣٠٠١٢٣٤٥٦٧٨٩٠١, מספר עוסק 514234567"
+    bank_account: "Bank account numbers and IBAN values. Examples: DE89 3704 0044 0532 0130 00, IR820540102680020817909002, SA0380000000608010167519, IL620108000000099999999"
+    credit_card: "Credit and debit card numbers in grouped or continuous forms. Examples: 4111 1111 1111 1111, ۵۰۲۲۲۹۱۰۲۳۴۵۶۷۸۹, ٥٥٥٥ ٤٤٤٤ ٣٣٣٣ ٢٢٢٢, 4580 0000 0000 0000"
+    crypto_wallet: "Blockchain wallet addresses across major chains. Examples: 0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7, 0x7e57d00477a8b2d9c5a4f6e1b3a2d1c9e8f7a6b5, bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kg3g4ty, 0xAbCdEf0123456789aBcDef0123456789AbCdEf01"
+
+    date: "Absolute or relative calendar dates in Gregorian/Hijri/Jalali/Hebrew notation, with no capitalization dependency. Examples: 2026-02-14, ۱۴۰۴/۱۱/۲۵, ١٤٤٧/٠٨/٠١, יד באדר תשפו"
+    time: "Clock times and parts of day across numeral systems. Examples: 10:45 AM, ۱۰:۴۵, ٢٢:٣٠, 22:30"
+
+    # Selected Ashura for Event because it is culturally salient and frequently mentioned across Persian/Arabic/Hebrew regional news.
+    event: "Named events such as conferences, sports events, and religious/cultural observances. Examples: WWDC 2024, نوروز ۱۴۰۵, عاشوراء ١٤٤٧, יום העצמאות ה-78"
+    product: "Named consumer or enterprise products, devices, platforms, and software releases. Examples: iPhone 15, سمند سورن, تويوتا كورولا, אייפון 15"
+
+    # Selected the Israeli Basic Law example because it appears often in Hebrew legal corpora and helps legal-domain transfer.
+    law: "Laws, regulations, legal acts, and policy instruments from any jurisdiction. Examples: GDPR, قانون تجارت ایران, نظام العمل السعودي, חוק יסוד: כבוד האדם וחירותו"
+    money: "Monetary amounts with symbols, codes, or currency words. Examples: $1,200, ۳۵۰٬۰۰۰ تومان, ١٥٠٠ ريال, ₪2,300"
+    percent: "Percentages and ratio percentages in Latin, Persian, or Arabic numerals. Examples: 12.5%, ۱۲٫۵٪, ١٢٫٥٪, 12%"
+    quantity: "Measurements, units, and explicit counts for physical/digital quantities. Examples: 5 km, ۳.۵ گیگابایت, ٧ لترات, 12 ק״מ"
+
+  ops_entities:
+    media: "News outlets, publishers, channels, and media brands. Examples: The New York Times, خبرگزاری فارس, قناة الجزيرة, גלובס"
+    project: "Named projects, initiatives, and codenames with version-like markers. Examples: Project Atlas v2, پروژه سپهر, مشروع النهضة, פרויקט אופק"
+    flight: "Flight identifiers and air-route codes. Examples: LY315, IR721, SV205, LY082"
+    ticket_id: "Ticket identifiers such as e-ticket numbers and booking references. Examples: E-TKT 220-1357913579, بلیت ۷۸۳۴۵۶۱۲, تذكرة 220-5556667777, כרטיס 016-1234567890"
+
+  legal_juris:
+    enabled_if:
+      any_keyword:
+        [
+          "court",
+          "trial",
+          "judge",
+          "case",
+          "docket",
+          "article",
+          "חוק",
+          "בית המשפט",
+          "محكمة",
+          "دادگاه",
+        ]
+    statute: "Specific legal statutes/articles/sections and codified provisions. Examples: Article 5 GDPR, ماده ۱۲ قانون مدنی, المادة 10 من القانون, סעיף 7 לחוק"
+    case_ref: "Court case names, docket numbers, and judicial citations. Examples: Brown v. Board, پرونده ۱۴۰۲/۲۳۴, القضية ١٢٣/٢٠٢٥, בגץ 1234/25"
+    law: "Legal acts and regulations; reinforced in legal contexts. Examples: GDPR, قانون تجارت ایران, قانون الأحوال الشخصية, חוק החוזים"
+
+  cyber_intel:
+    enabled_if:
+      any_keyword:
+        [
+          "CVE",
+          "APT",
+          "malware",
+          "ransomware",
+          "phishing",
+          "هجوم",
+          "بدافزار",
+          "תוקף",
+        ]
+    threat_actor: "Named attacker groups, state-aligned clusters, and campaign operators. Examples: APT29, گروه نفوذگر X, مجموعة قرصنة الظل, קבוצת תקיפה 77"
+    malware: "Malware families, strains, and named malicious tooling. Examples: Emotet, بدافزار شامون, برمجية خبيثة شمعون, נוזקת Pegasus"
+    vulnerability: "Known vulnerabilities including CVE IDs and named flaws. Examples: CVE-2025-12345, آسیب پذیری Zerologon, ثغرة Heartbleed, חולשת ProxyNotShell"
+    digital_indicator: "Technical indicators such as domains, hashes, URLs, and file signatures. Examples: evil-example.com, شاخص f1a9..., مؤشر 8d3c..., מזהה IOC"
+
+  clinical_science:
+    enabled_if:
+      any_keyword:
+        [
+          "diagnosis",
+          "symptom",
+          "hospitalization",
+          "ICU",
+          "drug",
+          "מחלה",
+          "תסמין",
+          "دارو",
+          "بیماری",
+        ]
+    condition: "Diseases, disorders, diagnoses, and symptom labels. Examples: diabetes, دیابت نوع ۲, ارتفاع ضغط الدم, סוכרת"
+    drug_agent: "Drug names, vaccines, compounds, and active pharmaceutical ingredients. Examples: ibuprofen, استامینوفن, باراسيتامول, אקמול"
+    procedure: "Clinical procedures, surgeries, imaging, and diagnostic tests. Examples: MRI scan, جراحی قلب باز, تنظير القولون, בדיקת CT"
+
+  fintech_trade:
+    enabled_if:
+      any_keyword:
+        [
+          "IBAN",
+          "SWIFT",
+          "invoice",
+          "transaction",
+          "ticker",
+          "crypto",
+          "فاکتور",
+          "تراکنش",
+          "חשבונית",
+        ]
+    asset_ticker: "Equity, commodity, ETF, and crypto ticker symbols. Examples: AAPL, شاخص طلا XAU, رمز BTC, מדד TA35"
+    transaction_ref: "Transaction references such as SWIFT, invoice IDs, payment IDs, and blockchain TX hashes. Examples: SWIFT CHASUS33, تراکنش TX-9081, مرجع دفع INV-55421, אסמכתא 779901"
+
+# =========================
+# 3) DETERMINISTIC ENRICHMENT
+# =========================
+enrichment:
+  regex:
+    year_any_script:
+      {
+        label: "date",
+        score: 0.90,
+        pattern: "(?:\\b(19|20)\\d{2}\\b|\\b(۱۹|۲۰)[۰-۹]{2}\\b|\\b(١٩|٢٠)[٠-٩]{2}\\b)",
+      }
+    date_numeric:
+      {
+        label: "date",
+        score: 0.90,
+        pattern: "\\b\\d{2}/\\d{2}/\\d{4}\\b|\\b\\d{4}/\\d{2}/\\d{2}\\b",
+      }
+    time_clock: { label: "time", score: 0.90, pattern: "\\b\\d{1,2}:\\d{2}\\b" }
+    percent_any:
+      {
+        label: "percent",
+        score: 0.95,
+        pattern: "(?:\\b\\d+(?:[\\.,]\\d+)?%\\b|\\b[۰-۹0-9]+(?:[\\.,٫][۰-۹0-9]+)?٪\\b)",
+      }
+    money_symbol_kmb:
+      {
+        label: "money",
+        score: 0.95,
+        pattern: "(?:[$€£₪]\\s*\\d+(?:[\\.,]\\d+)?\\s*[KMB]?)",
+      }
+    flight_code:
+      { label: "flight", score: 0.95, pattern: "\\b[A-Z]{1,3}\\d{2,4}\\b" }
+    ticket_etkt:
+      {
+        label: "ticket_id",
+        score: 0.95,
+        pattern: "\\bE-TKT\\s*\\d{3}-\\d{7,12}\\b",
+      }
+    project_code:
+      {
+        label: "project",
+        score: 0.95,
+        pattern: "\\b(?:Project|פרויקט|مشروع|پروژه)[- ]?[A-Z0-9][A-Z0-9\\-_/\\.]{3,}(?:\\s*v\\\\d+(?:\\.\\d+)*)?\\b",
+      }
+
+  keyword_rules:
+    geo_typing:
+      mountains:
+        {
+          labels_force: "location",
+          he: ["הר", "גבעה", "רכס"],
+          ar: ["جبل", "هضبة"],
+          fa: ["کوه", "قله"],
+        }
+      airports:
+        {
+          labels_force: "facility",
+          he: ["נמל התעופה", "שדה התעופה"],
+          ar: ["مطار"],
+          fa: ["فرودگاه"],
+        }
+      courts:
+        {
+          labels_force: "facility",
+          he: ["בית המשפט", "בית דין"],
+          ar: ["محكمة"],
+          fa: ["دادگاه"],
+        }
+      hospitals:
+        {
+          labels_force: "facility",
+          he: ["בית חולים", "המרכז הרפואי"],
+          ar: ["مستشفى"],
+          fa: ["بیمارستان"],
+        }
+
+    multi_org_split:
+      enabled: true
+      applies_to_labels: ["organization"]
+      split_on_patterns:
+        he: [", ו", ",", ' ו"']
+        ar: ["، و", "،", " و"]
+        fa: ["، و", "،", " و"]
+      do_not_split_if_contains: ["Ltd", "Inc", 'בע"מ', "GmbH", "S.A."]
+      parentheses_aware: true
+      max_splits: 4
+
+# =========================
+# 4) CONFLICT RESOLUTION
+# =========================
+conflict_resolution:
+  priorities:
+    uuid: 142
+    ip_address: 141
+    vulnerability: 140
+    credit_card: 139
+    bank_account: 138
+    passport_number: 137
+    driver_license: 136
+    tax_id: 135
+    national_id: 134
+    case_ref: 130
+    statute: 125
+    law: 124
+    threat_actor: 120
+    drug_agent: 115
+    person: 112
+    alias: 111
+    title: 110
+    organization: 105
+    media: 104
+    project: 103
+    event: 102
+    product: 101
+    facility: 97
+    landmark: 96
+    gpe: 94
+    location: 92
+    address: 90
+    postal_code: 89
+    country_code: 88
+    flight: 86
+    ticket_id: 85
+    email: 82
+    phone_number: 81
+    social_media_url: 80
+    url: 79
+    username: 78
+    crypto_wallet: 75
+    asset_ticker: 74
+    transaction_ref: 73
+    money: 70
+    percent: 65
+    quantity: 64
+    date: 60
+    time: 58
+    job_title: 50
+    misc: 10
+
+  overlap_rules:
+    prefer_longer_same_label: true
+    facility_over_location_if_supported: true
+    force_keyword_typed_geo: true
+    keep_flight_separate: true
+
+  dedupe:
+    by: ["start", "end", "label"]
+    merge_provenance: true
+    if_same_span_diff_label: "keep_higher_priority"
+
+# =========================
+# 5) THRESHOLDS
+# =========================
+thresholds:
+  high_accept: 0.85
+  low_accept: 0.35
+  overrides:
+    statute: 0.30
+    law: 0.30
+    vulnerability: 0.25
+    condition: 0.32
+    digital_indicator: 0.30
+    ticket_id: 0.40
+    flight: 0.40
+    project: 0.40
+    media: 0.40
+    email: 0.45
+    url: 0.45
+    phone_number: 0.42
+    bank_account: 0.45
+    credit_card: 0.46
+    national_id: 0.44
+
+  # Domain-scoped aggressive profile for mixed-script traffic.
+  domain_overrides:
+    multilingual_mixed:
+      high_accept: 0.80
+      low_accept: 0.30
+      overrides:
+        person: 0.28
+        organization: 0.28
+        gpe: 0.27
+        location: 0.27
+        facility: 0.27
+        address: 0.27
+        event: 0.29
+        product: 0.30
+
+# =========================
+# 6) QA / SAFETY CHECKS
+# =========================
+qa_checks:
+  offset_integrity:
+    enabled: true
+    fail_if_span_text_mismatch: true
+    remediation:
+      strategy: "reslice_with_offset_map_then_regex_fallback"
+
+  label_sanity:
+    enabled: true
+    rules:
+      - name: "date_must_look_like_date"
+        label: "date"
+        reject_if_not_matches_any_regex: ["year_any_script", "date_numeric"]
+      - name: "time_must_look_like_time"
+        label: "time"
+        reject_if_not_matches_any_regex: ["time_clock"]
+      - name: "project_should_have_projecty_shape"
+        label: "project"
+        reject_if_not_contains_any:
+          ["Project", "פרויקט", "مشروع", "پروژه", "-", "/", "v"]
+
+  morphology_guidance:
+    enabled: true
+    notes:
+      - "Arabic and Hebrew may attach prepositions/conjunctions as prefixes (e.g., بالقدس, ולתל אביב); keep the full surface span first, then normalize in canonical_text if needed."
+      - "Persian spacing and ZWNJ variants should preserve semantically linked tokens (e.g., می\u200cرود / می رود) before final canonicalization."
+      - "No QA rule should assume capitalization for entity detection in Persian, Arabic, or Hebrew."
+
+  capitalization_policy:
+    enabled: true
+    assumption: "case_agnostic"
+    notes:
+      - "Entity acceptance is script-agnostic; uppercase/title-case cues are optional and never required."

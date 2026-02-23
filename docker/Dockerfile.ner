@@ -1,0 +1,58 @@
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+# 1. Environment configuration
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=0 \
+    PIP_CACHE_DIR=/app/resources/cache/pip \
+    PIP_NO_BUILD_ISOLATION=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    TOKENIZERS_PARALLELISM=false \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    PYTHONPATH="/app/src"
+
+# 2. Install System Dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    ca-certificates \
+    curl \
+    git \
+    build-essential \
+    python3 \
+    python3-pip \
+    python3-dev \
+    && ln -s /usr/bin/python3 /usr/bin/python \
+    && python3 -m pip install --upgrade pip setuptools wheel \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 3. Install PyTorch (Aligned with requirements)
+RUN python3 -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+
+# 4. Install Project Requirements
+COPY requirements.txt /app/requirements.txt
+RUN python3 -m pip install -r /app/requirements.txt
+
+# 5. Download GLiNER2 model into the explicit local model directory used at runtime
+RUN mkdir -p /app/sharifsetup_NER
+RUN python3 -c "from huggingface_hub import snapshot_download; \
+    snapshot_download('fastino/gliner2-multi-v1', \
+    cache_dir='/app/.cache/ner', \
+    local_dir='/app/sharifsetup_NER', \
+    local_dir_use_symlinks=False)"
+
+# Force runtime to stay local-only after image build prefetch.
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
+# 6. Copy Application Files
+COPY . /app
+
+EXPOSE 8000
+
+# Use the NER specific entrypoint
+CMD ["uvicorn", "api.app_ner:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*", "--log-level", "info"]
