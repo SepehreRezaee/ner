@@ -28,9 +28,15 @@ from src.core.logging_config import configure_logging, resolve_uvicorn_log_level
 VERBOSE_LOGS_ENABLED = configure_logging()
 logger = logging.getLogger(__name__)
 
-from .dependencies_ner import get_ner_runtime_state, get_startup_mode, warmup_ner_service
-from .routers.ie import router as ie_router
-from .routers.ner import router as ner_router
+try:
+    from .dependencies_ner import get_ner_runtime_state, get_startup_mode, warmup_ner_service
+    from .routers.ie import router as ie_router
+    from .routers.ner import router as ner_router
+except ImportError:
+    # Support running this module directly: `python src/api/app_ner.py`.
+    from api.dependencies_ner import get_ner_runtime_state, get_startup_mode, warmup_ner_service
+    from api.routers.ie import router as ie_router
+    from api.routers.ner import router as ner_router
 
 VERSION_CODE = "3.0.0"
 APP_DISPLAY_NAME = "Sharifsetup-NER"

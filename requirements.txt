@@ -1,4 +1,4 @@
-fastapi==0.110.3
+fastapi==0.112.2
 uvicorn[standard]==0.30.1
 pydantic==2.7.4
 orjson==3.10.15
