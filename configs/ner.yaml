@@ -8,7 +8,7 @@ cache_dir: ".cache/ner"
 # 0) SYSTEM CONFIGURATION
 # =========================
 system:
-  local_model_dir: "sharifsetup_NER"
+  local_model_dir: "Sharifsetup-ner"
   device: "auto"
   device_map: null
   torch_dtype: "auto"
@@ -16,7 +16,7 @@ system:
   low_cpu_mem_usage: true
   local_files_only: true
   prefer_local_files: true
-  offline_mode: "auto"
+  offline_mode: true
   revision: null
   load_tokenizer: true
   trust_remote_code: false
@@ -35,8 +35,9 @@ system:
       "money",
       "event",
     ]
-  display_name: "sharifsetup-NER-v2.2.0-quadlingual"
-  download_on_startup: true
+  display_name: "Sharifsetup-NER"
+  download_on_startup: false
+  verbose_logs: false
 
 # =========================
 # 1) PIPELINE HARDENING

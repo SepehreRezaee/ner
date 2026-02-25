@@ -1,4 +1,4 @@
-# Sharifsetup NER
+# Sharifsetup-NER
 
 High-performance, production-ready NER/IE service built with FastAPI and GLiNER2.
 
@@ -50,10 +50,19 @@ src/
 - `pipeline.performance.max_inflight_batches`
 - `pipeline.rate_limit.chars_per_window`
 - `pipeline.rate_limit.window_seconds`
-- `system.local_model_dir` (set to `sharifsetup_NER`, loaded strictly from this directory)
+- `system.local_model_dir` (set to `Sharifsetup-ner`, loaded strictly from this directory)
 - `system.local_files_only`
 - `system.offline_mode`
 - `system.warmup_on_load`
+- `system.verbose_logs` (`false` = error-only logs, `true` = full/debug logs)
+
+## Download Model Once (Offline Runtime)
+
+```bash
+python3 scripts/download_model.py
+```
+
+This downloads `fastino/gliner2-multi-v1` into `Sharifsetup-ner/` and future runs load from that folder only.
 
 ## Quick Start
 

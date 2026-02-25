@@ -149,7 +149,7 @@ class GlinerModel(IEModel):
         # Application root directory (project root in local dev, /app in Docker image).
         app_root = Path(__file__).resolve().parents[4]
 
-        configured_dir = self._system_config().get("local_model_dir", "sharifsetup_NER")
+        configured_dir = self._system_config().get("local_model_dir", "Sharifsetup-ner")
         local_dir = Path(configured_dir).expanduser()
         if not local_dir.is_absolute():
             local_dir = (app_root / local_dir).resolve()
@@ -383,7 +383,7 @@ class GlinerModel(IEModel):
         warmup_text = str(
             system.get(
                 "warmup_text",
-                "On February 17, 2026, SharifSetup launched NER Studio in San Francisco.",
+                "On February 17, 2026, Sharifsetup-NER launched NER Studio in San Francisco.",
             )
         ).strip()
         warmup_labels = system.get(
@@ -410,7 +410,7 @@ class GlinerModel(IEModel):
         gliner2_cls = _import_gliner2()
 
         system_config = self._system_config()
-        display_name = system_config.get("display_name", self.config.model_name)
+        display_name = system_config.get("display_name", "Sharifsetup-NER")
         source = self._resolve_model_source()
         has_snapshot = self._has_local_snapshot()
         offline_mode = self._resolve_offline_mode(has_snapshot=has_snapshot)
@@ -621,7 +621,7 @@ class GlinerModel(IEModel):
         return entities
 
     def _append_entity(self, entities: List[NerEntity], item: Dict[str, Any], label: str) -> None:
-        display_name = self._system_config().get("display_name", self.config.model_name)
+        display_name = self._system_config().get("display_name", "Sharifsetup-NER")
         entities.append(
             NerEntity(
                 text=str(item.get("text", "")),

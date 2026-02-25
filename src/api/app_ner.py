@@ -23,11 +23,9 @@ for p in (SRC_DIR, ROOT_DIR):
     if p_str not in sys.path:
         sys.path.insert(0, p_str)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+from src.core.logging_config import configure_logging, resolve_uvicorn_log_level
+
+VERBOSE_LOGS_ENABLED = configure_logging()
 logger = logging.getLogger(__name__)
 
 from .dependencies_ner import get_ner_runtime_state, get_startup_mode, warmup_ner_service
@@ -35,7 +33,7 @@ from .routers.ie import router as ie_router
 from .routers.ner import router as ner_router
 
 VERSION_CODE = "3.0.0"
-APP_DISPLAY_NAME = "sharifsetup-NER-v2.0.1"
+APP_DISPLAY_NAME = "Sharifsetup-NER"
 STATIC_DIR = ROOT_DIR / "static"
 
 
@@ -192,9 +190,16 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
     reload_enabled = os.getenv("RELOAD", "1").strip().lower() in {"1", "true", "yes", "on"}
+    uvicorn_log_level = resolve_uvicorn_log_level(VERBOSE_LOGS_ENABLED)
 
     logger.info("Starting uvicorn server on %s:%d", host, port)
-    uvicorn.run("api.app_ner:app", host=host, port=port, reload=reload_enabled, log_level="info")
+    uvicorn.run(
+        "api.app_ner:app",
+        host=host,
+        port=port,
+        reload=reload_enabled,
+        log_level=uvicorn_log_level,
+    )
 
 
 __all__ = ["app", "create_app"]

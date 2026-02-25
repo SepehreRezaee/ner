@@ -2,16 +2,23 @@
 """Entrypoint for NER-only service."""
 
 import logging
+import os
 import sys
+from pathlib import Path
+
 import torch
 
-# Configure logging first
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    stream=sys.stdout
-)
+# Ensure project root and src are importable.
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+for p in (SRC_DIR, ROOT_DIR):
+    p_str = str(p)
+    if p_str not in sys.path:
+        sys.path.insert(0, p_str)
+
+from src.core.logging_config import configure_logging, resolve_uvicorn_log_level
+
+VERBOSE_LOGS_ENABLED = configure_logging(force=True)
 
 logger = logging.getLogger(__name__)
 logger.info("=== Starting NER Service Entrypoint ===")
@@ -38,7 +45,18 @@ except Exception as e:
 # Now start uvicorn
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting uvicorn server on 0.0.0.0:8000")
-    logger.info("API will be available at http://0.0.0.0:8000")
-    logger.info("API docs will be available at http://0.0.0.0:8000/docs")
-    uvicorn.run("api.app_ner:app", host="0.0.0.0", port=8000, log_level="info")
+
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn_log_level = resolve_uvicorn_log_level(VERBOSE_LOGS_ENABLED)
+
+    logger.info("Starting uvicorn server on %s:%d", host, port)
+    uvicorn.run(
+        "api.app_ner:app",
+        host=host,
+        port=port,
+        log_level=uvicorn_log_level,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+        workers=1,
+    )

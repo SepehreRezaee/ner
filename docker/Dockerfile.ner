@@ -37,17 +37,14 @@ RUN python3 -m pip install torch==2.5.1 --index-url https://download.pytorch.org
 COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install -r /app/requirements.txt
 
-# 5. Download GLiNER2 model into the explicit local model directory used at runtime
-RUN mkdir -p /app/sharifsetup_NER
-RUN python3 -c "from huggingface_hub import snapshot_download; \
-    snapshot_download('fastino/gliner2-multi-v1', \
-    cache_dir='/app/.cache/ner', \
-    local_dir='/app/sharifsetup_NER', \
-    local_dir_use_symlinks=False)"
+# 5. Copy the pre-downloaded offline model snapshot from the project directory.
+COPY Sharifsetup-ner /app/Sharifsetup-ner
+RUN test -f /app/Sharifsetup-ner/config.json || (echo "Sharifsetup-ner is missing model files. Run scripts/download_model.py first." && exit 1)
 
-# Force runtime to stay local-only after image build prefetch.
+# Force runtime to stay local-only.
 ENV HF_HUB_OFFLINE=1 \
-    TRANSFORMERS_OFFLINE=1
+    TRANSFORMERS_OFFLINE=1 \
+    VERBOSE_LOGS=0
 
 # 6. Copy Application Files
 COPY . /app
@@ -55,4 +52,4 @@ COPY . /app
 EXPOSE 8000
 
 # Use the NER specific entrypoint
-CMD ["uvicorn", "api.app_ner:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*", "--log-level", "info"]
+CMD ["python3", "docker/entrypoint_ner.py"]
